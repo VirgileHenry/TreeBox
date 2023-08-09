@@ -63,20 +63,22 @@ impl<T> TreeBox<T> {
 
     /// Call a mutable operation on the parent.
     /// If the parent does not exist, this will do nothing.
-    pub fn mutate_parent<F: Fn(&mut T)>(&mut self, f: F) {
+    pub fn mutate_parent<F: Fn(&mut TreeBox<T>)>(&mut self, f: F) {
         match self.inner.borrow().parent {
             Some(ref parent) => match parent.upgrade() {
-                Some(ref parent) => f(&mut parent.borrow_mut().value),
+                Some(parent) => f(&mut TreeBox { inner: parent }),
                 None => {/* parent got dropped, don't execute */}
             },
             None => {/* no parent, don't execute */}
         }
     }
 
-    pub fn mutate_children<F: Fn(&mut T)>(&mut self, f: F) {
+    /// Calls the mutating function on all children, considered as treebox themselves.
+    /// This allow recursive calls if needed.
+    pub fn mutate_children<F: Fn(&mut TreeBox<T>)>(&mut self, f: F) {
         for child in &RefCell::borrow(&self.inner).children {
             match child.upgrade() {
-                Some(child) => f(&mut child.borrow_mut().value),
+                Some(child) => f(&mut TreeBox { inner: child }),
                 None => {/* child got dropped, don't execute */}
             }
         }
