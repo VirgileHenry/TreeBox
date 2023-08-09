@@ -9,6 +9,7 @@ It was primarly designed for the transform component of the propellant game engi
 This struct can :
 - Create a new tree box from a value.
 - Set the tree box parent.
+- Get a ref to the parent.
 - A tree box can iterate over its children.
 
 ## Usage

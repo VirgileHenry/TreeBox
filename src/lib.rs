@@ -27,27 +27,27 @@ type TreeBoxResult<T> = Result<T, TreeBoxError>;
 pub mod test;
 
 pub struct TreeBox<T> {
-    inner: Rc<RefCell<TreeBoxImpl<T>>>,
+    inner: Rc<RefCell<TreeBoxData<T>>>,
 }
 
-struct TreeBoxImpl<T> {
+pub struct TreeBoxData<T> {
     value: T,
-    parent: Option<Weak<RefCell<TreeBoxImpl<T>>>>,
-    children: Vec<Weak<RefCell<TreeBoxImpl<T>>>>,
+    parent: Option<Weak<RefCell<TreeBoxData<T>>>>,
+    children: Vec<Weak<RefCell<TreeBoxData<T>>>>,
 }
 
 impl<T> TreeBox<T> {
     /// Creates a new tree box as the children of self.
     /// This will fail if the inner data of self is already borrowed mutably.
     pub fn create_child(&mut self, value: T) -> TreeBoxResult<TreeBox<T>> {
-        let self_inner = Rc::<RefCell<TreeBoxImpl<T>>>::downgrade(&self.inner);
-        let child_impl = TreeBoxImpl {
+        let self_inner = Rc::<RefCell<TreeBoxData<T>>>::downgrade(&self.inner);
+        let child_impl = TreeBoxData {
             value,
             parent: Some(self_inner),
             children: Vec::new(),
         };
         let child_inner = Rc::new(RefCell::new(child_impl));
-        RefCell::try_borrow_mut(&self.inner)?.children.push(Rc::<RefCell<TreeBoxImpl<T>>>::downgrade(&child_inner));
+        RefCell::try_borrow_mut(&self.inner)?.children.push(Rc::<RefCell<TreeBoxData<T>>>::downgrade(&child_inner));
         Ok(TreeBox { inner: child_inner })
     }
 
@@ -57,11 +57,11 @@ impl<T> TreeBox<T> {
         if let Some(prev_parent) = RefCell::try_borrow_mut(&self.inner)?.parent.take() {
             match prev_parent.upgrade() {
                 Some(prev_parent) => RefCell::try_borrow_mut(&prev_parent)?.children
-                    .retain(|v| v.as_ptr() != Rc::<RefCell<TreeBoxImpl<T>>>::downgrade(&self.inner).as_ptr()),
+                    .retain(|v| v.as_ptr() != Rc::<RefCell<TreeBoxData<T>>>::downgrade(&self.inner).as_ptr()),
                 None => {/* parent have been dropped, so don't need to remove ourself from it */}
             }
         }
-        RefCell::try_borrow_mut(&self.inner)?.parent = parent.map(|v| Rc::<RefCell<TreeBoxImpl<T>>>::downgrade(&v.inner));
+        RefCell::try_borrow_mut(&self.inner)?.parent = parent.map(|v| Rc::<RefCell<TreeBoxData<T>>>::downgrade(&v.inner));
         Ok(())
     }
 
@@ -73,6 +73,16 @@ impl<T> TreeBox<T> {
     /// Access a mutable reference to the inner value of this box.
     pub fn value_mut(&mut self) -> TreeBoxResult<RefMut<T>> {
         Ok(RefMut::map(self.inner.try_borrow_mut()?, |v| &mut v.value))
+    }
+
+    pub fn parent(&self) -> TreeBoxResult<Option<TreeBox<T>>> {
+        match &self.inner.try_borrow()?.parent {
+            Some(v) => Ok(Some( match v.upgrade() {
+                Some(v) => TreeBox { inner: v },
+                None => return Ok(None),
+            })),
+            None => Ok(None),
+        }   
     }
 
     /// Iterates over the children of self.
@@ -92,7 +102,7 @@ impl<T> From<T> for TreeBox<T> {
     /// Create a new tree box with the given value.
     fn from(value: T) -> Self {
         TreeBox {
-            inner: Rc::<RefCell<_>>::new(RefCell::new(TreeBoxImpl {
+            inner: Rc::<RefCell<_>>::new(RefCell::new(TreeBoxData {
                 value,
                 parent: None,
                 children: Vec::new(),
