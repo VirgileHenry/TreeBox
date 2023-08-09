@@ -20,6 +20,37 @@ struct TreeBoxData<T> {
     children: Vec<Weak<RefCell<TreeBoxData<T>>>>,
 }
 
+impl<T> TreeBoxData<T> {
+    
+    fn mutate_parent_rec<F: Fn(&mut T)>(&mut self, f: F) {
+        match self.parent {
+            Some(ref parent) => match parent.upgrade() {
+                Some(parent) => {
+                    let mut parent = RefCell::borrow_mut(&parent);
+                    f(&mut parent.value);
+                    parent.mutate_parent_rec(f);
+                },
+                None => {/* parent got dropped, don't execute */},
+            },
+            None => {/* no parent, don't execute */},
+        }
+    }
+
+    fn mutate_children_rec<F: Fn(&mut T)>(&mut self, f: &F) {
+        for child in &self.children {
+            match child.upgrade() {
+                Some(child) => {
+                    let mut child_tb = RefCell::borrow_mut(&child);
+                    f(&mut child_tb.value);
+                    child_tb.mutate_children_rec(f);
+                    
+                },
+                None => {/* child got dropped, don't execute */}
+            }
+        }
+    }
+}
+
 impl<T> TreeBox<T> {
     /// Creates a new tree box as the children of self.
     /// This will fail if the inner data of self is already borrowed mutably.
@@ -75,21 +106,12 @@ impl<T> TreeBox<T> {
 
     /// Call a mutable operation on the parent, and recursively on all parents.
     /// If the parent does not exist, this will do nothing.
-    pub fn mutate_parent_recursive<F: Fn(&mut T)>(&mut self, f: F) {
-        match self.inner.borrow().parent {
-            Some(ref parent) => match parent.upgrade() {
-                Some(parent) => {
-                    f(&mut RefCell::borrow_mut(&parent).value);
-                    let mut parent_as_tb = TreeBox { inner: parent };
-                    parent_as_tb.mutate_parent_recursive(f);
-                },
-                None => {/* parent got dropped, don't execute */}
-            },
-            None => {/* no parent, don't execute */}
-        }
+    pub fn mutate_parent_rec<F: Fn(&mut T)>(&mut self, f: F) {
+        self.inner.borrow_mut().mutate_parent_rec(f);
     }
 
     /// Calls the mutating function on all children.
+    /// If we encounter a reference to a child that have been dropped, we will not execute the function.
     pub fn mutate_children<F: Fn(&mut T)>(&mut self, f: F) {
         for child in &RefCell::borrow(&self.inner).children {
             match child.upgrade() {
@@ -101,17 +123,8 @@ impl<T> TreeBox<T> {
 
     /// Calls the mutating function on all children, and on all children recursively.
     /// This allow recursive calls if needed.
-    pub fn mutate_child_rec<F: Fn(&mut T)>(&mut self, f: F) {
-        for child in &RefCell::borrow(&self.inner).children {
-            match child.upgrade() {
-                Some(child) => {
-                    f(&mut RefCell::borrow_mut(&child).value);
-                    let mut child_as_tb = TreeBox { inner: child };
-                    child_as_tb.mutate_child_rec(&f);
-                },
-                None => {/* child got dropped, don't execute */}
-            }
-        }
+    pub fn mutate_children_rec<F: Fn(&mut T)>(&mut self, f: F) {
+        self.inner.borrow_mut().mutate_children_rec(&f);
     }
 }
 
