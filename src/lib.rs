@@ -96,6 +96,9 @@ impl<T> TreeBox<T> {
             }
         }
         RefCell::borrow_mut(&self.inner).parent = parent.map(|v| Rc::<RefCell<TreeBoxData<T>>>::downgrade(&v.inner));
+        if let Some(parent) = parent {
+            RefCell::borrow_mut(&parent.inner).children.push(Rc::<RefCell<TreeBoxData<T>>>::downgrade(&self.inner));
+        }
     }
 
     /// Gets a value out of the tree box by calling the given function with a reference to the inner value.

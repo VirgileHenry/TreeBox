@@ -31,7 +31,7 @@ fn rec() {
 }
 
 #[test]
-fn paent_get_rec() {
+fn parent_get_rec() {
     let mut parent: TreeBox<Option<String>> = Some(String::from("Hello")).into();
     let mut child1 = parent.create_child(None);
     let grandchild1 = child1.create_child(None);
