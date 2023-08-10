@@ -29,3 +29,20 @@ fn rec() {
         println!("{}", s);
     });
 }
+
+#[test]
+fn paent_get_rec() {
+    let mut parent: TreeBox<Option<String>> = Some(String::from("Hello")).into();
+    let mut child1 = parent.create_child(None);
+    let grandchild1 = child1.create_child(None);
+    let result = grandchild1.get_parent_rec(
+        |s| {
+            println!("try get");
+            s.clone().map(|s| s)
+        },
+        |_, p| {
+            println!("try get failed: parent fallback");
+            p.or(Some("No Value at all !".to_string())).unwrap()
+        });
+    assert_eq!(result, "Hello".to_string());
+}

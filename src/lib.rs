@@ -14,6 +14,7 @@ pub struct TreeBox<T> {
     inner: Rc<RefCell<TreeBoxData<T>>>,
 }
 
+
 struct TreeBoxData<T> {
     value: T,
     parent: Option<Weak<RefCell<TreeBoxData<T>>>>,
@@ -21,6 +22,22 @@ struct TreeBoxData<T> {
 }
 
 impl<T> TreeBoxData<T> {
+
+    fn get_parent_rec<U, F: Fn(&T) -> Option<U>, G: Fn(&T, Option<U>) -> U>(&self, try_get: &F, parent_fallback: &G) -> U {
+        match try_get(&self.value) {
+            Some(v) => v,
+            None => match self.parent {
+                Some(ref parent) => match parent.upgrade() {
+                    Some(parent) => {
+                        let parent = RefCell::borrow(&parent);
+                        parent_fallback(&self.value, Some(parent.get_parent_rec(try_get, parent_fallback)))
+                    },
+                    None => parent_fallback(&self.value, None),
+                },
+                None => parent_fallback(&self.value, None),
+            }
+        }
+    }
     
     fn mutate_parent_rec<F: Fn(&mut T)>(&mut self, f: F) {
         match self.parent {
@@ -85,6 +102,15 @@ impl<T> TreeBox<T> {
     /// We can't return a reference to the inner value, because our invariant prevents it.
     pub fn get<U, F: FnOnce(&T) -> U>(&self, f: F) -> U {
         f(&self.inner.borrow().value)
+    }
+
+    /// Gets a value from the tree box, with options to look up recursively to parents if necessary.
+    /// This is super specific to my use case, but this is why I built this ds.
+    /// the try get will be called on the value, and if it fails, it will call the parent fallback.
+    /// If we have no parent, the param of the parent fallback is none, otherwise it is the result of a recursive call,
+    /// So it's like we called this func on the parent, and used the result as the param for the parent fallback.
+    pub fn get_parent_rec<U, F: Fn(&T) -> Option<U>, G: Fn(&T, Option<U>) -> U>(&self, try_get: F, parent_fallback: G) -> U {
+        self.inner.borrow().get_parent_rec(&try_get, &parent_fallback)
     }
 
     /// Call a mutable operation on the inner value.
